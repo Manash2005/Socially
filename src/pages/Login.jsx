@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layout, ArrowRight, Loader2, Sparkles, Mail, Lock, User } from 'lucide-react';
-import axios from 'axios';
+import api from '../api';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
@@ -36,7 +36,7 @@ const Login = () => {
         ? { email: formData.email, password: formData.password }
         : { name: formData.name, email: formData.email, password: formData.password };
 
-      const res = await axios.post(endpoint, payload);
+      const res = await api.post(endpoint, payload);
       
       if (res.data.token) {
         // Use context login function

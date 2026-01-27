@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import api from '../api';
 
 const PostContext = createContext();
 
@@ -6,28 +7,14 @@ export const usePosts = () => useContext(PostContext);
 
 export const PostProvider = ({ children }) => {
   const [posts, setPosts] = useState([]);
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
 
   // Trigger for other components (like Profile) to refresh their data
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const fetchFeed = async () => {
     try {
-      const res = await fetch('/api/posts/feed', {
-        headers: getAuthHeaders()
-      });
-      
-      if (!res.ok) {
-        if (res.status === 401) {
-          console.error("Unauthorized - Please login");
-        }
-        return;
-      }
-
-      const responseData = await res.json();
+      const res = await api.get('/api/posts/feed');
+      const responseData = res.data;
       
       const mappedPosts = (responseData.data || []).map(p => ({
         id: p.id,
@@ -51,6 +38,9 @@ export const PostProvider = ({ children }) => {
       setPosts(mappedPosts); 
       setRefreshTrigger(prev => prev + 1); // Notify listeners
     } catch (err) {
+      if (err.response?.status === 401) {
+        console.error("Unauthorized - Please login");
+      }
       console.error("Failed to fetch feed:", err);
       setPosts([]);
     }
@@ -71,10 +61,7 @@ export const PostProvider = ({ children }) => {
         return p;
       }));
 
-      await fetch(`/api/likes/${postId}`, {
-        method: 'POST',
-        headers: getAuthHeaders()
-      });
+      await api.post(`/api/likes/${postId}`);
     } catch (err) {
       console.error("Like failed", err);
       fetchFeed(); // Revert on error
@@ -87,14 +74,7 @@ export const PostProvider = ({ children }) => {
         // Ideally we should wait for response for meaningful ID if we want to reply immediately, 
         // but for now we just push.
         
-        await fetch(`/api/comments/${postId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeaders()
-            },
-            body: JSON.stringify({ text, parentId })
-        });
+        await api.post(`/api/comments/${postId}`, { text, parentId });
         
         // Background fetch to get real comment with server timestamp/ID
         fetchComments(postId);
@@ -106,8 +86,8 @@ export const PostProvider = ({ children }) => {
 
   const fetchComments = async (postId) => {
       try {
-          const res = await fetch(`/api/comments/${postId}`, { headers: getAuthHeaders() });
-          const data = await res.json();
+          const res = await api.get(`/api/comments/${postId}`);
+          const data = res.data;
           
           setPosts(current => current.map(p => {
               if (p.id === postId) {
@@ -132,58 +112,34 @@ export const PostProvider = ({ children }) => {
 
   const editComment = async (commentId, postId, text) => {
       try {
-          await fetch(`/api/comments/${commentId}`, {
-              method: 'PUT',
-              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text })
-          });
+          await api.put(`/api/comments/${commentId}`, { text });
           fetchComments(postId);
       } catch (err) { console.error(err); }
   };
 
   const deleteComment = async (commentId, postId) => {
       try {
-          await fetch(`/api/comments/${commentId}`, {
-              method: 'DELETE',
-              headers: getAuthHeaders()
-          });
+          await api.delete(`/api/comments/${commentId}`);
           fetchComments(postId);
       } catch (err) { console.error(err); }
   };
 
   const deletePost = async (postId) => {
       try {
-          const res = await fetch(`/api/posts/${postId}`, {
-              method: 'DELETE',
-              headers: getAuthHeaders()
-          });
-          if (res.ok) {
-              setPosts(current => current.filter(p => p.id !== postId));
-              setRefreshTrigger(prev => prev + 1); // Refresh profile counts
-          }
+          await api.delete(`/api/posts/${postId}`);
+          setPosts(current => current.filter(p => p.id !== postId));
+          setRefreshTrigger(prev => prev + 1); // Refresh profile counts
       } catch (err) { console.error(err); }
   };
 
   const createPost = async (payload) => {
-    // If payload is FormData (which it is now), don't stringify and don't set Content-Type (browser does it with boundary)
-    const isFormData = payload instanceof FormData;
-
-    const res = await fetch('/api/posts', {
-      method: 'POST',
-      headers: {
-        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-        ...getAuthHeaders()
-      },
-      body: isFormData ? payload : JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to create post');
+    try {
+        await api.post('/api/posts', payload);
+        setRefreshTrigger(prev => prev + 1); // Force immediate refresh of profile/feed
+        fetchFeed();
+    } catch (err) {
+        throw new Error(err.response?.data?.error || 'Failed to create post');
     }
-
-    setRefreshTrigger(prev => prev + 1); // Force immediate refresh of profile/feed
-    fetchFeed();
   };
 
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
@@ -193,14 +149,7 @@ export const PostProvider = ({ children }) => {
 
   const reportPost = async (postId, reason) => {
     try {
-      await fetch(`/api/reports/${postId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify({ reason })
-      });
+      await api.post(`/api/reports/${postId}`, { reason });
     } catch (err) {
       console.error("Report failed", err);
     }

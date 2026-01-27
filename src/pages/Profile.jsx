@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import { MapPin, Calendar, Link as LinkIcon, ShieldCheck, Edit3, X, Check, ChevronDown } from 'lucide-react';
@@ -35,8 +35,8 @@ const Profile = () => {
     const fetchProfileAndPosts = async () => {
       try {
         const [resProfile, resPosts] = await Promise.all([
-           axios.get(`/api/users/${id}`),
-           axios.get(`/api/posts/user/${id}`)
+           api.get(`/api/users/${id}`),
+           api.get(`/api/posts/user/${id}`)
         ]);
 
         setProfile(resProfile.data);
@@ -97,11 +97,7 @@ const Profile = () => {
               formData.append('avatar', avatarFile);
           }
 
-          const res = await axios.put('/api/auth/me', formData, {
-              headers: {
-                  'Content-Type': 'multipart/form-data',
-              },
-          });
+          const res = await api.put('/api/auth/me', formData);
           
           setProfile({ ...profile, ...res.data.user });
           

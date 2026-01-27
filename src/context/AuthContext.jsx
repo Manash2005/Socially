@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 const AuthContext = createContext(null);
 
@@ -12,16 +12,7 @@ export const AuthProvider = ({ children }) => {
   // Initialize token from localStorage
   const [token, setToken] = useState(localStorage.getItem('token'));
 
-  // Configure axios defaults whenever token changes
-  useEffect(() => {
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      localStorage.setItem('token', token);
-    } else {
-      delete axios.defaults.headers.common['Authorization'];
-      localStorage.removeItem('token');
-    }
-  }, [token]);
+
 
   const fetchMe = async () => {
     if (!token) {
@@ -30,7 +21,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const res = await axios.get('/api/auth/me');
+      const res = await api.get('/api/auth/me');
       setUser(res.data.user);
     } catch (err) {
       console.error('Failed to fetch user:', err);
@@ -52,8 +43,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    localStorage.setItem('token', token || '');
     fetchMe();
-  }, [token]); // Re-run if token changes (e.g. login)
+  }, [token]);
 
   const updateUser = (userData) => {
     setUser(prev => ({ ...prev, ...userData }));
