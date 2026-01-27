@@ -11,6 +11,9 @@ export const PostProvider = ({ children }) => {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  // Trigger for other components (like Profile) to refresh their data
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   const fetchFeed = async () => {
     try {
       const res = await fetch('/api/posts/feed', {
@@ -29,6 +32,7 @@ export const PostProvider = ({ children }) => {
       const mappedPosts = (responseData.data || []).map(p => ({
         id: p.id,
         author: {
+          id: p.user_id,
           name: p.user_name,
           avatar: p.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.user_name)}&background=random`
         },
@@ -45,6 +49,7 @@ export const PostProvider = ({ children }) => {
       }));
 
       setPosts(mappedPosts); 
+      setRefreshTrigger(prev => prev + 1); // Notify listeners
     } catch (err) {
       console.error("Failed to fetch feed:", err);
       setPosts([]);
@@ -76,35 +81,19 @@ export const PostProvider = ({ children }) => {
     }
   };
 
-  const addComment = async (postId, text) => {
+  const addComment = async (postId, text, parentId = null) => {
     try {
-        // Optimistic update
-        const newComment = {
-            id: Date.now(),
-            user: "You", // valid for now
-            avatar: null,
-            text,
-            time: "Just now"
-        };
-
-        setPosts(current => current.map(p => {
-            if (p.id === postId) {
-                return {
-                    ...p,
-                    comments: [...p.comments, newComment],
-                    commentCount: p.commentCount + 1
-                };
-            }
-            return p;
-        }));
-
+        // Optimistic update (simplified)
+        // Ideally we should wait for response for meaningful ID if we want to reply immediately, 
+        // but for now we just push.
+        
         await fetch(`/api/comments/${postId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 ...getAuthHeaders()
             },
-            body: JSON.stringify({ text })
+            body: JSON.stringify({ text, parentId })
         });
         
         // Background fetch to get real comment with server timestamp/ID
@@ -127,10 +116,13 @@ export const PostProvider = ({ children }) => {
                       comments: data.map(c => ({
                           id: c.id,
                           user: c.name,
+                          userId: c.user_id, // For ownership check
                           avatar: c.avatar_url,
                           text: c.text,
-                          time: new Date(c.created_at).toLocaleDateString()
-                      }))
+                          parentId: c.parent_id,
+                          time: new Date(c.created_at).toLocaleDateString() + ' ' + new Date(c.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                      })),
+                      commentCount: data.length
                   };
               }
               return p;
@@ -138,11 +130,45 @@ export const PostProvider = ({ children }) => {
       } catch (err) {}
   };
 
+  const editComment = async (commentId, postId, text) => {
+      try {
+          await fetch(`/api/comments/${commentId}`, {
+              method: 'PUT',
+              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text })
+          });
+          fetchComments(postId);
+      } catch (err) { console.error(err); }
+  };
+
+  const deleteComment = async (commentId, postId) => {
+      try {
+          await fetch(`/api/comments/${commentId}`, {
+              method: 'DELETE',
+              headers: getAuthHeaders()
+          });
+          fetchComments(postId);
+      } catch (err) { console.error(err); }
+  };
+
+  const deletePost = async (postId) => {
+      try {
+          const res = await fetch(`/api/posts/${postId}`, {
+              method: 'DELETE',
+              headers: getAuthHeaders()
+          });
+          if (res.ok) {
+              setPosts(current => current.filter(p => p.id !== postId));
+              setRefreshTrigger(prev => prev + 1); // Refresh profile counts
+          }
+      } catch (err) { console.error(err); }
+  };
+
   const createPost = async (payload) => {
     // If payload is FormData (which it is now), don't stringify and don't set Content-Type (browser does it with boundary)
     const isFormData = payload instanceof FormData;
 
-    await fetch('/api/posts', {
+    const res = await fetch('/api/posts', {
       method: 'POST',
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
@@ -150,6 +176,13 @@ export const PostProvider = ({ children }) => {
       },
       body: isFormData ? payload : JSON.stringify(payload)
     });
+
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to create post');
+    }
+
+    setRefreshTrigger(prev => prev + 1); // Force immediate refresh of profile/feed
     fetchFeed();
   };
 
@@ -183,11 +216,15 @@ export const PostProvider = ({ children }) => {
       createPost, 
       toggleLike, 
       addComment, 
+      editComment,
+      deleteComment,
       fetchComments,
+      deletePost,
       reportPost,
       isCreatePostOpen,
       openCreatePost,
-      closeCreatePost
+      closeCreatePost,
+      refreshTrigger // Expose for Profile
     }}>
       {children}
     </PostContext.Provider>

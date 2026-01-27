@@ -120,8 +120,6 @@ const CreatePostModal = () => {
          if (selectedBatches.length > 0) formData.append('target_batches', JSON.stringify(selectedBatches));
          if (selectedCampuses.length > 0) formData.append('target_campuses', JSON.stringify(selectedCampuses));
          if (selectedBranches.length > 0) formData.append('target_branches', JSON.stringify(selectedBranches));
-      } else {
-         formData.append('visibility', 'public');
       }
 
       await createPost(formData);

@@ -11,7 +11,7 @@ import { usePosts } from '../context/PostContext'; // for actions like like/comm
 const Profile = () => {
   const { id } = useParams();
   const { user: currentUser, updateUser } = useAuth(); // Get logged-in user and updater
-  const { toggleLike, addComment, fetchComments } = usePosts(); // Actions
+  const { toggleLike, addComment, fetchComments, refreshTrigger } = usePosts(); // Actions
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]); // User's posts
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,7 @@ const Profile = () => {
     };
 
     fetchProfileAndPosts();
-  }, [id]);
+  }, [id, refreshTrigger]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -352,7 +352,7 @@ const Profile = () => {
                  {/* Stats */}
                  <div className="flex items-center gap-8 mt-8 border-t border-slate-100 pt-6">
                     <div className="text-center">
-                       <div className="text-xl font-black text-slate-900">0</div>
+                       <div className="text-xl font-black text-slate-900">{profile.post_count || 0}</div>
                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Posts</div>
                     </div>
                     <div className="text-center">

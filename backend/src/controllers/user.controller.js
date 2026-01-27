@@ -4,10 +4,14 @@ export const getUserProfile = async (req, res, next) => {
   try {
     const userId = req.params.id;
 
-    const [users] = await db.query(
-      'SELECT id, name, username, email, role, avatar_url, bio, batch_year, campus, department, created_at FROM users WHERE id = ?',
-      [userId]
-    );
+
+    const [users] = await db.query(`
+      SELECT 
+        u.id, u.name, u.username, u.email, u.role, u.avatar_url, u.bio, u.batch_year, u.campus, u.department, u.created_at,
+        (SELECT COUNT(*) FROM posts WHERE posts.user_id = u.id) as post_count
+      FROM users u 
+      WHERE u.id = ?
+    `, [userId]);
 
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found' });

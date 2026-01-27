@@ -203,3 +203,35 @@ export const getUserPosts = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * DELETE POST
+ * DELETE /api/posts/:id
+ */
+export const deletePost = async (req, res, next) => {
+  try {
+    const postId = req.params.id;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check post ownership
+    const [posts] = await db.query('SELECT user_id FROM posts WHERE id = ?', [postId]);
+
+    if (posts.length === 0) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    const post = posts[0];
+
+    // Allow deletion if owner or admin
+    if (post.user_id !== userId && userRole !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized to delete this post' });
+    }
+
+    await db.query('DELETE FROM posts WHERE id = ?', [postId]);
+
+    res.json({ message: 'Post deleted' });
+  } catch (err) {
+    next(err);
+  }
+};
