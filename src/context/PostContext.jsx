@@ -64,46 +64,42 @@ export const PostProvider = ({ children }) => {
 
   const createPost = async (payload) => {
     try {
-      let content = '';
-      let imageFile = null;
-      let visibility = 'public';
-      let category = 'general';
+      let content, imageFile, visibility, category;
 
-      // Handle FormData or plain object
-      if (payload instanceof FormData) {
+      // Handle FormData or Object (Robust Check for Production)
+      if (payload && typeof payload.get === 'function') {
         content = payload.get('content');
         imageFile = payload.get('image');
-        visibility = payload.get('visibility') || 'public';
-        category = payload.get('category') || 'general';
+        visibility = payload.get('visibility');
+        category = payload.get('category');
       } else {
-        content = payload.content;
-        imageFile = payload.image;
-        visibility = payload.visibility || 'public';
-        category = payload.category || 'general';
+         // Fallback for direct object usage if any
+         content = payload.content;
+         imageFile = payload.image; // Assume this might be a file or url
+         visibility = payload.visibility;
+         category = payload.category;
       }
 
-      let image_url = null;
+      let imageUrl = null;
 
-      // Handle Image Upload if file exists
-      if (imageFile && typeof imageFile !== 'string') {
+      // Upload Image if present and is a File
+      if (imageFile && imageFile instanceof File) {
         const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${user.id}/${fileName}`;
-
-        const { error: uploadError, data } = await supabase.storage
-          .from('post-images')
-          .upload(filePath, imageFile);
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('posts')
+          .upload(fileName, imageFile);
 
         if (uploadError) throw uploadError;
 
-        // Get Public URL
         const { data: { publicUrl } } = supabase.storage
-          .from('post-images')
-          .getPublicUrl(filePath);
-
-        image_url = publicUrl;
+          .from('posts')
+          .getPublicUrl(fileName);
+          
+        imageUrl = publicUrl;
       } else if (typeof imageFile === 'string') {
-        image_url = imageFile;
+          // If it's already a string (URL), usage it
+          imageUrl = imageFile;
       }
 
       const { error } = await supabase
@@ -111,17 +107,18 @@ export const PostProvider = ({ children }) => {
         .insert({
           user_id: user.id,
           content: content,
-          image_url: image_url,
-          visibility: visibility,
-          category: category
+          image_url: imageUrl,
+          visibility: visibility || 'public',
+          category: category || 'general'
         });
 
       if (error) throw error;
-
+      
       fetchFeed();
       setIsCreatePostOpen(false);
     } catch (err) {
       console.error('Create post failed:', err);
+      // Re-throw so the modal can handle it
       throw err;
     }
   };
