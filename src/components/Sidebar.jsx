@@ -39,7 +39,7 @@ const Sidebar = () => {
            {/* ... Image & Info (Same as before) ... */}
            {/* Re-implementing inner content since replace overwrites block */}
            <img 
-            src={user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`} 
+            src={user?.user_metadata?.avatar_url || user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.user_metadata?.full_name || user?.email || 'User')}&background=random`} 
             className="w-11 h-11 rounded-full object-cover relative border-2 border-white shadow-sm"
             alt="Profile"
           />
@@ -47,7 +47,9 @@ const Sidebar = () => {
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <h3 className="font-black text-slate-900 text-[14px] tracking-tight truncate">{user?.name || 'Guest User'}</h3>
+            <h3 className="font-black text-slate-900 text-[14px] tracking-tight truncate">
+              {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Guest User'}
+            </h3>
             <ShieldCheck size={14} className="text-indigo-500 shrink-0" fill="currentColor" fillOpacity={0.1} />
           </div>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{user?.role || 'Student'}</p>

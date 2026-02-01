@@ -84,7 +84,7 @@ const Navbar = () => {
             >
               <div className="relative">
                 <img 
-                  src={user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`} 
+                  src={user?.user_metadata?.avatar_url || user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.user_metadata?.full_name || user?.email || 'User')}&background=random`} 
                   className="w-9 h-9 rounded-xl object-cover ring-2 ring-transparent group-hover:ring-indigo-100 transition-all"
                   alt="Profile"
                 />
@@ -103,7 +103,7 @@ const Navbar = () => {
                   className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 overflow-hidden"
                 >
                   <div className="px-4 py-3 border-b border-slate-50 mb-1">
-                    <p className="text-sm font-black text-slate-800 truncate">{user?.name}</p>
+                    <p className="text-sm font-black text-slate-800 truncate">{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}</p>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user?.role || 'Student'}</p>
                   </div>
                   

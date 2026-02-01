@@ -116,17 +116,38 @@ const Profile = () => {
 
   const handleSave = async () => {
       try {
-          // TODO: Helper to upload avatar if changed
           let newAvatarUrl = profile.avatar_url;
 
-          // Update Profile in Supabase
+          // 1. Upload Avatar if Changed
+          if (avatarFile) {
+              const fileExt = avatarFile.name.split('.').pop();
+              const fileName = `${currentUser.id}-${Date.now()}.${fileExt}`;
+              const filePath = `${fileName}`;
+
+              // Upload to 'avatars' bucket
+              const { error: uploadError } = await supabase.storage
+                  .from('avatars')
+                  .upload(filePath, avatarFile);
+
+              if (uploadError) throw uploadError;
+
+              // Get Public URL
+              const { data: { publicUrl } } = supabase.storage
+                  .from('avatars')
+                  .getPublicUrl(filePath);
+
+              newAvatarUrl = publicUrl;
+          }
+
+          // 2. Update Profile in Supabase (Database)
           const updates = {
               username: editForm.username,
               bio: editForm.bio,
               campus: editForm.campus,
               batch: editForm.batch,
               branch: editForm.branch,
-              updated_at: new Date(),
+              avatar_url: newAvatarUrl, // Update avatar_url in DB
+              // updated_at: new Date(), // REMOVED: Column does not exist in schema
           };
 
           const { error } = await supabase
@@ -135,13 +156,43 @@ const Profile = () => {
               .eq('id', currentUser.id);
 
           if (error) throw error;
+
+          // 3. Update Supabase Auth User Metadata (Global Sync)
+          // This ensures useAuth() user object is updated immediately so Navbar/Sidebar reflect changes
+          const { error: authUpdateError } = await supabase.auth.updateUser({
+              data: {
+                  avatar_url: newAvatarUrl,
+                  full_name: profile.full_name, // Ensure this is synced if editable
+                  ...updates
+              }
+          });
+
+          if (authUpdateError) throw authUpdateError;
           
           setProfile(prev => ({ ...prev, ...updates }));
+          
+          // Update local posts state to reflect new avatar immediately
+          setPosts(prevPosts => prevPosts.map(p => {
+             // Check if the post belongs to the current user (using p.author.id or just comparing current user)
+             // In Profile page, all posts belong to likely the profile user, but let's be safe
+             if (p.author.id === currentUser.id) {
+                 return {
+                     ...p,
+                     author: {
+                         ...p.author,
+                         avatar: newAvatarUrl,
+                         name: updates.full_name || p.author.name // Update name if changed (though name isn't in edit form yet)
+                     }
+                 };
+             }
+             return p;
+          }));
+
           setIsEditing(false);
           
       } catch (err) {
           console.error("Update failed:", err);
-          alert('Failed to update profile');
+          alert(`Failed to update profile: ${err.message}`);
       }
   };
 
