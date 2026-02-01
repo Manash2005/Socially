@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Feed from './pages/Feed';
 import Profile from './pages/Profile';
@@ -13,7 +13,7 @@ function App() {
   return (
     <AuthProvider>
       <PostProvider>
-        <Router basename={import.meta.env.BASE_URL}>
+        <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
 
