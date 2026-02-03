@@ -1,4 +1,4 @@
-import { db } from '../config/db.js';
+import { supabase } from '../config/supabase.js';
 
 export const createReport = async (req, res, next) => {
   const { postId } = req.params;
@@ -10,19 +10,24 @@ export const createReport = async (req, res, next) => {
   }
 
   try {
-    const [result] = await db.query(
-      'INSERT INTO reports (reporter_id, post_id, reason, status) VALUES (?, ?, ?, ?)',
-      [reporterId, postId, reason, 'pending']
-    );
+    const { data, error } = await supabase
+      .from('reports')
+      .insert({
+        reporter_id: reporterId,
+        post_id: postId,
+        reason,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
 
     res.status(201).json({
       message: 'Report submitted successfully',
-      reportId: result.insertId,
+      report: data,
     });
   } catch (err) {
-    if (err.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(404).json({ error: 'Post or user not found' });
-    }
     next(err);
   }
 };

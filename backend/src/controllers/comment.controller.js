@@ -1,4 +1,4 @@
-import { db } from '../config/db.js';
+import { supabase } from '../config/supabase.js';
 
 export const addComment = async (req, res, next) => {
   try {
@@ -10,15 +10,22 @@ export const addComment = async (req, res, next) => {
       return res.status(400).json({ error: 'Comment cannot be empty' });
     }
 
-    const [result] = await db.query(
-      `INSERT INTO comments (post_id, user_id, text, parent_id)
-       VALUES (?, ?, ?, ?)`,
-      [postId, userId, text, parentId || null]
-    );
+    const { data, error } = await supabase
+      .from('comments')
+      .insert({
+        post_id: postId,
+        user_id: userId,
+        text,
+        parent_id: parentId || null
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
 
     res.status(201).json({
       message: 'Comment added',
-      commentId: result.insertId
+      comment: data
     });
   } catch (err) {
     next(err);
@@ -29,15 +36,24 @@ export const getComments = async (req, res, next) => {
   try {
     const { postId } = req.params;
 
-    const [comments] = await db.query(`
-      SELECT comments.id, comments.text, comments.parent_id, comments.created_at, comments.user_id, users.name, users.avatar_url
-      FROM comments
-      JOIN users ON comments.user_id = users.id
-      WHERE comments.post_id = ?
-      ORDER BY comments.created_at ASC
-    `, [postId]);
+    const { data, error } = await supabase
+      .from('comments')
+      .select(`
+        id, text, parent_id, created_at, user_id,
+        profiles:user_id (full_name, avatar_url)
+      `)
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true });
 
-    res.json(comments);
+    if (error) throw error;
+
+    const formattedComments = data.map(c => ({
+      ...c,
+      name: c.profiles?.full_name || 'Unknown',
+      avatar_url: c.profiles?.avatar_url
+    }));
+
+    res.json(formattedComments);
   } catch (err) {
     next(err);
   }
@@ -47,18 +63,19 @@ export const updateComment = async (req, res, next) => {
   try {
     const { commentId } = req.params;
     const { text } = req.body;
-    const userId = req.user.id; // Corrected from req.user.id
+    const userId = req.user.id;
 
-    // Check ownership
-    const [existing] = await db.query('SELECT user_id FROM comments WHERE id = ?', [commentId]);
-    if (existing.length === 0) return res.status(404).json({ error: 'Comment not found' });
+    const { data, error } = await supabase
+      .from('comments')
+      .update({ text })
+      .match({ id: commentId, user_id: userId })
+      .select()
+      .single();
 
-    if (existing[0].user_id !== userId) {
-      return res.status(403).json({ error: 'Not authorized' });
-    }
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Comment not found or not authorized' });
 
-    await db.query('UPDATE comments SET text = ? WHERE id = ?', [text, commentId]);
-    res.json({ message: 'Comment updated' });
+    res.json({ message: 'Comment updated', comment: data });
 
   } catch (err) {
     next(err);
@@ -70,15 +87,13 @@ export const deleteComment = async (req, res, next) => {
     const { commentId } = req.params;
     const userId = req.user.id;
 
-    // Check ownership
-    const [existing] = await db.query('SELECT user_id FROM comments WHERE id = ?', [commentId]);
-    if (existing.length === 0) return res.status(404).json({ error: 'Comment not found' });
+    const { error } = await supabase
+      .from('comments')
+      .delete()
+      .match({ id: commentId, user_id: userId });
 
-    if (existing[0].user_id !== userId) { // can expand to admin later
-      return res.status(403).json({ error: 'Not authorized' });
-    }
+    if (error) throw error;
 
-    await db.query('DELETE FROM comments WHERE id = ?', [commentId]);
     res.json({ message: 'Comment deleted' });
 
   } catch (err) {

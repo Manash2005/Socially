@@ -1,23 +1,29 @@
-import { db } from '../config/db.js';
+import { supabase } from '../config/supabase.js';
 
 export const getUserProfile = async (req, res, next) => {
   try {
     const userId = req.params.id;
 
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(`
+        *,
+        posts (count)
+      `)
+      .eq('id', userId)
+      .single();
 
-    const [users] = await db.query(`
-      SELECT 
-        u.id, u.name, u.username, u.email, u.role, u.avatar_url, u.bio, u.batch_year, u.campus, u.department, u.created_at,
-        (SELECT COUNT(*) FROM posts WHERE posts.user_id = u.id) as post_count
-      FROM users u 
-      WHERE u.id = ?
-    `, [userId]);
-
-    if (users.length === 0) {
+    if (error || !data) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(users[0]);
+    // Format post_count
+    const formattedUser = {
+      ...data,
+      post_count: data.posts?.[0]?.count || 0
+    };
+
+    res.json(formattedUser);
   } catch (err) {
     next(err);
   }

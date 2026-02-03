@@ -1,27 +1,36 @@
-import { db } from '../config/db.js';
+import { supabase } from '../config/supabase.js';
 
 export const toggleLike = async (req, res, next) => {
   try {
     const { postId } = req.params;
     const userId = req.user.id;
 
-    // Try to insert (Like)
-    try {
-      await db.query(
-        `INSERT INTO likes (post_id, user_id) VALUES (?, ?)`,
-        [postId, userId]
-      );
+    // Check if like exists
+    const { data: existing, error: checkError } = await supabase
+      .from('likes')
+      .select('id')
+      .match({ post_id: postId, user_id: userId })
+      .maybeSingle();
+
+    if (checkError) throw checkError;
+
+    if (existing) {
+      // Unlike
+      const { error: deleteError } = await supabase
+        .from('likes')
+        .delete()
+        .match({ post_id: postId, user_id: userId });
+
+      if (deleteError) throw deleteError;
+      return res.status(200).json({ liked: false });
+    } else {
+      // Like
+      const { error: insertError } = await supabase
+        .from('likes')
+        .insert({ post_id: postId, user_id: userId });
+
+      if (insertError) throw insertError;
       return res.status(201).json({ liked: true });
-    } catch (error) {
-      // If Duplicate Entry, then Delete (Unlike)
-      if (error.code === 'ER_DUP_ENTRY') {
-        await db.query(
-          `DELETE FROM likes WHERE post_id = ? AND user_id = ?`,
-          [postId, userId]
-        );
-        return res.status(200).json({ liked: false });
-      }
-      throw error; // Rethrow other errors
     }
   } catch (err) {
     next(err);
