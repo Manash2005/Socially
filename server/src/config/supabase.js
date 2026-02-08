@@ -1,13 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from './env.js';
 
-const supabaseUrl = env.supabaseUrl;
-const supabaseKey = env.supabaseKey;
+const { supabaseUrl, supabaseKey } = env;
 
-if (!supabaseUrl || !supabaseKey) {
-    console.error('❌ Missing Supabase URL or Key in environment variables');
+// Guard against initialization if variables are missing
+export const supabase = (supabaseUrl && supabaseKey)
+    ? createClient(supabaseUrl, supabaseKey)
+    : null;
+
+if (supabase) {
+    console.log('✅ Supabase client initialized');
+} else {
+    console.error('⚠️ Supabase client could not be initialized due to missing credentials.');
 }
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
-
-console.log('✅ Supabase client initialized');
