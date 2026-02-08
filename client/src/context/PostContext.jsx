@@ -73,11 +73,11 @@ export const PostProvider = ({ children }) => {
         visibility = payload.get('visibility');
         category = payload.get('category');
       } else {
-         // Fallback for direct object usage if any
-         content = payload.content;
-         imageFile = payload.image; // Assume this might be a file or url
-         visibility = payload.visibility;
-         category = payload.category;
+        // Fallback for direct object usage if any
+        content = payload.content;
+        imageFile = payload.image; // Assume this might be a file or url
+        visibility = payload.visibility;
+        category = payload.category;
       }
 
       let imageUrl = null;
@@ -95,11 +95,11 @@ export const PostProvider = ({ children }) => {
         const { data: { publicUrl } } = supabase.storage
           .from('posts')
           .getPublicUrl(fileName);
-          
+
         imageUrl = publicUrl;
       } else if (typeof imageFile === 'string') {
-          // If it's already a string (URL), usage it
-          imageUrl = imageFile;
+        // If it's already a string (URL), usage it
+        imageUrl = imageFile;
       }
 
       const { error } = await supabase
@@ -113,8 +113,8 @@ export const PostProvider = ({ children }) => {
         });
 
       if (error) throw error;
-      
-      fetchFeed();
+
+      await fetchFeed(); // Ensure feed is refreshed before closing modal
       setIsCreatePostOpen(false);
     } catch (err) {
       console.error('Create post failed:', err);
@@ -123,7 +123,7 @@ export const PostProvider = ({ children }) => {
     }
   };
 
-  
+
   const toggleLike = async (postId) => {
     try {
       if (!user) return;
