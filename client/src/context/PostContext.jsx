@@ -6,6 +6,19 @@ const PostContext = createContext();
 
 export const usePosts = () => useContext(PostContext);
 
+// Helper to normalize visibility strings/objects
+const normalizeVisibility = (vis) => {
+  if (!vis || vis === 'null' || vis === 'public') return null;
+  if (typeof vis === 'string') {
+    try {
+      return JSON.parse(vis);
+    } catch (e) {
+      return vis; // Return as is for legacy strings like 'campus'
+    }
+  }
+  return vis;
+};
+
 export const PostProvider = ({ children }) => {
   const [posts, setPosts] = useState([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -15,11 +28,18 @@ export const PostProvider = ({ children }) => {
   // Fetch Feed from Supabase
   const fetchFeed = async () => {
     try {
-      // Fetch posts with author info, like counts, and comment counts
-      // Note: Supabase join queries can be tricky for counts. 
-      // For simplicity in this step, we fetch posts + profiles, then we might need separate counts or a view later.
-      // But let's try a robust query.
+      // 1. Fetch profile
+      let profile = null;
+      if (user) {
+        const { data: pData } = await supabase
+          .from('profiles')
+          .select('batch, campus, branch')
+          .eq('id', user.id)
+          .single();
+        profile = pData;
+      }
 
+      // 2. Fetch posts
       const { data, error } = await supabase
         .from('posts')
         .select(`
@@ -32,33 +52,66 @@ export const PostProvider = ({ children }) => {
 
       if (error) throw error;
 
-      const mappedPosts = data.map(p => {
-        const isLiked = user ? p.likes.some(like => like.user_id === user.id) : false;
+      // 3. Process Feed
+      const processedPosts = data
+        .map(p => {
+          const vis = normalizeVisibility(p.visibility);
+          const isLiked = user ? p.likes.some(like => like.user_id === user.id) : false;
 
-        return {
-          id: p.id,
-          author: {
-            id: p.profiles?.id,
-            name: p.profiles?.full_name || 'Unknown',
-            avatar: p.profiles?.avatar_url
-          },
-          content: p.content,
-          image: p.image_url,
-          likes: p.likes.length,
-          isLiked: isLiked,
-          comments: [], // We load actual comments on demand usually, or could pre-fetch
-          commentCount: p.comments.length,
-          shares: 0,
-          timestamp: new Date(p.created_at).toLocaleDateString(),
-          visibility: p.visibility === 'campus' ? 'Campus Only' : 'Public',
-          category: p.category
-        };
-      });
+          return {
+            id: p.id,
+            author: {
+              id: p.profiles?.id,
+              name: p.profiles?.full_name || 'Anonymous User',
+              avatar: p.profiles?.avatar_url
+            },
+            userId: p.user_id, // Keep raw ID for ownership check
+            content: p.content,
+            image: p.image_url,
+            likes: p.likes.length,
+            isLiked: isLiked,
+            comments: [],
+            commentCount: p.comments.length,
+            shares: 0,
+            timestamp: new Date(p.created_at).toLocaleDateString(),
+            visibility: vis,
+            category: p.category
+          };
+        })
+        .filter(post => {
+          // Rule 0: Always see your own posts
+          if (user && post.userId === user.id) return true;
 
-      setPosts(mappedPosts);
+          const vis = post.visibility;
+          // Rule 1: Public/Null is visible to all
+          if (!vis) return true;
+
+          // Rule 2: Handle Legacy strings (e.g. 'campus')
+          if (typeof vis === 'string') {
+            if (vis === 'campus') {
+              return profile?.campus ? true : false; // Basic legacy fallback
+            }
+            return true; // Treat other unknown strings as public for safety
+          }
+
+          // Rule 3: Structured Audience Match
+          const batches = vis.batches || [];
+          const campuses = vis.campuses || [];
+          const branches = vis.branches || [];
+
+          if (!batches.length && !campuses.length && !branches.length) return true;
+
+          const batchMatch = batches.length === 0 || (profile?.batch && batches.includes(profile.batch));
+          const campusMatch = campuses.length === 0 || (profile?.campus && campuses.includes(profile.campus));
+          const branchMatch = branches.length === 0 || (profile?.branch && branches.includes(profile.branch));
+
+          return batchMatch && campusMatch && branchMatch;
+        });
+
+      setPosts(processedPosts);
       setRefreshTrigger(prev => prev + 1);
-    } catch (error) {
-      console.error('Error fetching feed:', error);
+    } catch (err) {
+      console.error('Error fetching feed:', err);
     }
   };
 
@@ -102,13 +155,23 @@ export const PostProvider = ({ children }) => {
         imageUrl = imageFile;
       }
 
+      // Safe Visibility Parsing
+      let finalVisibility = visibility;
+      if (typeof visibility === 'string') {
+        try {
+          finalVisibility = JSON.parse(visibility);
+        } catch (e) {
+          finalVisibility = visibility === 'null' ? null : visibility;
+        }
+      }
+
       const { error } = await supabase
         .from('posts')
         .insert({
           user_id: user.id,
           content: content,
           image_url: imageUrl,
-          visibility: visibility || 'public',
+          visibility: finalVisibility || null,
           category: category || 'general'
         });
 

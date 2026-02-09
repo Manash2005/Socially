@@ -24,13 +24,25 @@ export const createPost = async (req, res, next) => {
       image_url = `${protocol}://${host}/uploads/posts/${req.file.filename}`;
     }
 
+    // Handle visibility object
+    let parsedVisibility = visibility;
+    if (typeof visibility === 'string' && visibility !== 'null') {
+      try {
+        parsedVisibility = JSON.parse(visibility);
+      } catch (e) {
+        parsedVisibility = null;
+      }
+    } else if (visibility === 'null') {
+      parsedVisibility = null;
+    }
+
     const { data, error } = await supabase
       .from('posts')
       .insert({
         user_id: userId,
         content,
         image_url,
-        visibility: visibility || 'public',
+        visibility: parsedVisibility, // Stores null if not provided
         category: category || 'general'
       })
       .select()
@@ -53,21 +65,71 @@ export const createPost = async (req, res, next) => {
  */
 export const getFeed = async (req, res, next) => {
   try {
-    const { data, error } = await supabase
+    // 1. Fetch current user's profile to get their batch/campus/branch
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('batch, campus, branch')
+      .eq('id', req.user.id)
+      .single();
+
+    if (profileError) {
+      console.warn('Profile not found for filtering, showing public feed only');
+    }
+
+    // 2. Fetch posts
+    // For robust filtering on JSONB, we can use Supabase's containment or filter logic.
+    // However, the simplest way to represent "Empty OR Contains" in JS for Postgres 
+    // is often a raw filter or combining multiple conditions.
+
+    let query = supabase
       .from('posts')
       .select(`
         *,
         profiles:user_id (id, full_name, avatar_url),
         likes (count),
         comments (count)
-      `)
-      .order('created_at', { ascending: false });
+      `);
+
+    // Filtering Logic:
+    // We want posts where:
+    // (visibility->'batches' IS NULL OR visibility->'batches' = '[]' OR visibility->'batches' ? USER_BATCH)
+    // AND similar for campus and branch.
+    // Since Supabase JS client has limits on complex OR/AND JSON logic, 
+    // a common pattern is to fetch and filter in JS if the volume is small, 
+    // or use a smart 'or' filter string.
+
+    // For now, let's fetch all (or a large limit) and filter or use basic Supabase filters.
+    // Given the monorepo structure, let's try a robust filter string if possible.
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
 
+    // 3. Filter data in JS for precision (handles null/missing as "Everyone")
+    const filteredData = data.filter(post => {
+      // Rule 0: Always see your own posts
+      if (post.user_id === req.user.id) return true;
+
+      const vis = post.visibility;
+      // Step 4: Missing/null or specific "public" string = unrestricted
+      if (!vis || vis === 'public' || vis === 'null') return true;
+
+      const batches = vis.batches || [];
+      const campuses = vis.campuses || [];
+      const branches = vis.branches || [];
+
+      // If all arrays are empty, it's public
+      if (batches.length === 0 && campuses.length === 0 && branches.length === 0) return true;
+
+      const batchMatch = batches.length === 0 || (profile?.batch && batches.includes(profile.batch));
+      const campusMatch = campuses.length === 0 || (profile?.campus && campuses.includes(profile.campus));
+      const branchMatch = branches.length === 0 || (profile?.branch && branches.includes(profile.branch));
+
+      return batchMatch && campusMatch && branchMatch;
+    });
+
     // Supabase returns counts in an array or as a field depending on query
-    // To match previous format:
-    const formattedPosts = data.map(p => ({
+    const formattedPosts = filteredData.map(p => ({
       ...p,
       user_name: p.profiles?.full_name || 'Unknown',
       avatar_url: p.profiles?.avatar_url,
