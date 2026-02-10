@@ -1,0 +1,16 @@
+# Common
+node_modules/
+.env*
+.DS_Store
+dist/
+build/
+
+# Frontend (client)
+client/node_modules/
+client/dist/
+client/.env*
+
+# Backend (server)
+server/node_modules/
+server/.env*
+server/uploads/
