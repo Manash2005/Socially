@@ -88,7 +88,7 @@ const PostCard = ({ post, setShowReport, addComment, toggleLike, fetchComments }
                     const count = (vis.batches?.length || 0) + (vis.campuses?.length || 0) + (vis.branches?.length || 0);
                     if (count === 0) return <><Globe size={10} /> All</>;
 
-                    return <><Users size={10} /> Custom ({count})</>;
+                    return <><Users size={10} /> Custom</>;
                   })()}
                 </span>
                 {post.category && (
@@ -178,7 +178,16 @@ const PostCard = ({ post, setShowReport, addComment, toggleLike, fetchComments }
               count={post.commentCount || 0}
               color="hover:text-indigo-500"
             />
-            <PostAction icon={<Share2 size={18} />} count={post.shares} color="hover:text-emerald-500" />
+            {(() => {
+              const vis = post.visibility;
+              const isPostForAll = (!vis || vis === 'public' || vis === 'null') ||
+                (typeof vis === 'string' && vis !== 'campus') ||
+                (typeof vis === 'object' && ((vis.batches?.length || 0) + (vis.campuses?.length || 0) + (vis.branches?.length || 0)) === 0);
+
+              return isPostForAll ? (
+                <PostAction icon={<Share2 size={18} />} count={post.shares} color="hover:text-emerald-500" />
+              ) : null;
+            })()}
           </div>
           <button className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all">
             <Bookmark size={20} />
